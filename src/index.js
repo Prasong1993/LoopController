@@ -23,7 +23,7 @@ export default {
   };
   const integrity=async run=>{
    const er=await env.DB.prepare("SELECT seq,event_type,payload_json,prev_hash,event_hash,created_at FROM audit_events WHERE run_id=? ORDER BY seq").bind(run.id).all();
-   const vr=await env.DB.prepare("SELECT id,stage,source,content_hash FROM evidence WHERE run_id=?").bind(run.id).all();
+   const vr=await env.DB.prepare("SELECT id,stage,source,content,content_hash FROM evidence WHERE run_id=?").bind(run.id).all();
    const events=er.results||[], evidence=vr.results||[];
    if(!events.length||events[0].event_type!=="RUN_CREATED") return {ok:false,reason:"Missing RUN_CREATED event"};
    let prev="GENESIS",stage=null,completed=0; const logged=new Map();
@@ -44,7 +44,7 @@ export default {
    }
    if(completed>1)return {ok:false,reason:"Duplicate completion events"};
    if(logged.size!==evidence.length)return {ok:false,reason:"Persisted evidence count differs from audit log"};
-   for(const ev of evidence){const l=logged.get(ev.id);if(!l||l.stage!==ev.stage||l.source!==ev.source||l.contentHash!==ev.content_hash)return {ok:false,reason:"Persisted evidence does not match audit log",evidenceId:ev.id};}
+   for(const ev of evidence){const l=logged.get(ev.id);if(!l||l.stage!==ev.stage||l.source!==ev.source||l.contentHash!==ev.content_hash||await sha(ev.content)!==ev.content_hash)return {ok:false,reason:"Persisted evidence content or metadata does not match its recorded hash",evidenceId:ev.id};}
    if(run.current_stage!==stage)return {ok:false,reason:"Run stage differs from audit replay"};
    if(run.status==="COMPLETE"&&(completed!==1||stage!=="VERIFY"||!run.completed_at))return {ok:false,reason:"Completed run state does not match audit log"};
    if(run.status!=="COMPLETE"&&completed!==0)return {ok:false,reason:"Audit log marks run complete but run state does not"};
