@@ -1,0 +1,9 @@
+name = "project-control-api-cloudflare"
+main = "src/index.js"
+compatibility_date = "2026-10-09"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "project-control-api-db"
+database_id = "a771bd3c-01eb-4e1f-befe-22aafa3674e8"
