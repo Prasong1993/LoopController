@@ -56,11 +56,12 @@ export default {
    if(url.pathname==="/openapi.json"&&request.method==="GET")return reply({openapi:"3.1.0",info:{title:"Project Control API",version:"1.0.0",description:"Evidence-gated project workflow controller"},servers:[{url:url.origin}],paths:{"/_api/health":{get:{summary:"Health check",responses:{"200":{description:"Healthy"}}}},"/_api/control":{post:{summary:"Run a control action",security:[{ProjectControlKey:[]}],responses:{"200":{description:"Success"},"400":{description:"Invalid request"},"401":{description:"Unauthorized"},"404":{description:"Not found"},"409":{description:"Workflow gate blocked"}}}},"/_api/admin/bootstrap":{post:{summary:"Create the first API key once",responses:{"201":{description:"Created"}}}}},components:{securitySchemes:{ProjectControlKey:{type:"apiKey",in:"header",name:"X-Project-Control-Key"}}}});
    if(url.pathname==="/_api/admin/bootstrap"&&request.method==="POST"){
     if(!env.BOOTSTRAP_TOKEN||(request.headers.get("X-Bootstrap-Token")||"")!==env.BOOTSTRAP_TOKEN)return reply({error:"Unauthorized"},401);
-    const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM api_keys").first();if((count?.n||0)>0)return reply({error:"Bootstrap already completed"},409);
     const raw=new Uint8Array(32);crypto.getRandomValues(raw);
     const token="pc_live_"+btoa(String.fromCharCode(...raw)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");
     const now=new Date().toISOString(),id=crypto.randomUUID();
-    await env.DB.prepare("INSERT INTO api_keys(id,key_hash,label,created_at) VALUES(?,?,?,?)").bind(id,await sha(token),"Initial API key",now).run();
+    // A single conditional INSERT prevents two concurrent bootstrap requests from both succeeding.
+    const inserted=await env.DB.prepare("INSERT INTO api_keys(id,key_hash,label,created_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM api_keys) RETURNING id").bind(id,await sha(token),"Initial API key",now).first();
+    if(!inserted)return reply({error:"Bootstrap already completed"},409);
     return reply({status:"created",warning:"Save this key now; it is shown only once.",apiKey:token,createdAt:now},201);
    }
    if(url.pathname!=="/_api/control"||request.method!=="POST")return reply({error:"Not found"},404);
@@ -118,6 +119,6 @@ export default {
     return reply({runId:run.id,status:"COMPLETE",currentStage:"VERIFY",completedAt:now,integrity:await integrity(updated)});
    }
    return reply({error:"Unsupported action"},400);
-  }catch(error){return reply({error:"Internal server error",detail:String(error?.message||error)},500);}
+  }catch(error){console.error("Project Control API request failed",error);return reply({error:"Internal server error"},500);}
  }
 };
