@@ -101,7 +101,7 @@ describe("Project Control API", () => {
     expect(audit.status).toBe(200);
     const auditBody = await audit.json();
     expect(auditBody.integrity.ok).toBe(true);
-    expect(auditBody.integrity.eventCount).toBe(10);
+    expect(auditBody.integrity.eventCount).toBe(11);
 
     const detail = await call("detail", { runId });
     expect(detail.status).toBe(200);
